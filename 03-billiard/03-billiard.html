@@ -49,7 +49,7 @@
         canvas.width = window.innerWidth - 20;
         canvas.height = window.innerHeight - 100;
 
-        var simMinWidth = 20.0;
+        var simMinWidth = 2.0;
         var cScale = Math.min(canvas.width, canvas.height) / simMinWidth;
         var simWidth = canvas.width / cScale;
         var simHeight = canvas.height / cScale;
@@ -117,8 +117,8 @@
             constructor(radius, mass, pos, vel) {
                 this.radius = radius;
                 this.mass = mass;
-                this.pos = pos;
-                this.vel = vel;
+                this.pos = pos.clone();
+                this.vel = vel.clone();
             }
 
             simulate(dt, gravity){
@@ -170,7 +170,7 @@
         }
 
         // collision handling ----
-        function handleCollision(ball1, ball2, restitution)
+        function handleBallCollision(ball1, ball2, restitution)
         {
             var dir = new Vector2();
             dir.subtractVectors(ball2.pos, ball1.pos);
@@ -181,31 +181,59 @@
 
             dir.scale(1.0 / d);
 
-             
+            var corr = (ball1.radius + ball2.radius - d) / 2.0;
+            ball1.pos.add(dir, -corr);
+            ball2.pos.add(dir, corr);
+
+            var v1 = ball1.vel.dot(dir);
+            var v2 = ball2.vel.dot(dir);
+
+            var m1 = ball1.mass;
+            var m2 = ball2.mass;
+
+            var newV1 = (m1 * v1 + m2 * v2 - m2 * restitution * (v1 - v2)) / (m1 + m2);
+            var newV2 = (m1 * v1 + m2 * v2 - m1 * restitution * (v2 - v1)) / (m1 + m2);
+
+            ball1.vel.add(dir, newV1 - v1);
+            ball2.vel.add(dir, newV2 - v2);
         }
 
-        // simulate
-
-        function simulate() {
-            ball.vel.x += gravity.x * timeStep;
-            ball.vel.y += gravity.y * timeStep;
-
-            ball.pos.x += ball.vel.x * timeStep;
-            ball.pos.y += ball.vel.y * timeStep;
-
+        function handleWallCollision(ball, worldSize)
+        {
             if (ball.pos.y - ball.radius < 0.0) {
                 ball.pos.y = ball.radius;
                 ball.vel.y = -ball.vel.y;
             }
 
-            if (ball.pos.x + ball.radius > simWidth) {
-                ball.pos.x = simWidth - ball.radius;
+            if (ball.pos.y + ball.radius > worldSize.y) {
+                ball.pos.y = worldSize.y - ball.radius;
+                ball.vel.y = -ball.vel.y;
+            }
+
+            if (ball.pos.x + ball.radius > worldSize.x) {
+                ball.pos.x = worldSize.x - ball.radius;
                 ball.vel.x = -ball.vel.x;
             }
 
             if (ball.pos.x - ball.radius < 0.0) {
                 ball.pos.x = ball.radius;
                 ball.vel.x = -ball.vel.x;
+            }
+        }
+
+        // simulate
+
+        function simulate() {
+            for (i = 0; i < physicsScene.balls.length; i++) {
+                var ball1 = physicsScene.balls[i];
+                ball1.simulate(physicsScene.dt, physicsScene.gravity);
+
+                for (j = i + 1; j < physicsScene.balls.length; j++) {
+                    var ball2 = physicsScene.balls[j];
+                    handleBallCollision(ball1, ball2, physicsScene.restitution);
+                }
+
+                handleWallCollision(ball1, physicsScene.worldSize);
             }
             
         }
@@ -217,7 +245,12 @@
             requestAnimationFrame(update);
         }
 
+        setupScene();
         update();
+
+        document.getElementById("restitutionSlider").oninput = function() {
+		    physicsScene.restitution = this.value / 10.0;
+	    }
 
         </script>
     </body>
